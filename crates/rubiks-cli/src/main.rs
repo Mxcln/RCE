@@ -1,3 +1,4 @@
+mod alg_output;
 mod render;
 mod repl;
 
@@ -7,6 +8,7 @@ use std::io::{self, BufReader};
 use rubiks_alg::{ScrambleGenerator, ScrambleMode, TrainingScrambleGenerator};
 use rubiks_core::Cube;
 
+use crate::alg_output::{alg_list_output, alg_show_output};
 use crate::render::ascii;
 use crate::repl::run as run_repl;
 
@@ -41,6 +43,16 @@ fn try_main() -> Result<(), String> {
             println!("{output}");
             Ok(())
         }
+        [cmd, subcmd, family] if cmd == "alg" && subcmd == "list" => {
+            let output = alg_list_output(family)?;
+            println!("{output}");
+            Ok(())
+        }
+        [cmd, subcmd, family, case_id] if cmd == "alg" && subcmd == "show" => {
+            let output = alg_show_output(family, case_id)?;
+            println!("{output}");
+            Ok(())
+        }
         [cmd] if cmd == "repl" => {
             let stdin = io::stdin();
             let mut stdout = io::stdout();
@@ -51,7 +63,7 @@ fn try_main() -> Result<(), String> {
 }
 
 fn usage() -> &'static str {
-    "usage:\n  rubiks-cli new\n  rubiks-cli apply \"<notation>\"\n  rubiks-cli scramble [length]\n  rubiks-cli repl"
+    "usage:\n  rubiks-cli new\n  rubiks-cli apply \"<notation>\"\n  rubiks-cli scramble [length]\n  rubiks-cli alg list <oll|pll>\n  rubiks-cli alg show <oll|pll> <case_id>\n  rubiks-cli repl"
 }
 
 fn parse_length(input: &str) -> Result<usize, String> {
@@ -86,6 +98,8 @@ mod tests {
             [cmd, _notation] if cmd == "apply" => Ok(()),
             [cmd] if cmd == "scramble" => Ok(()),
             [cmd, _length] if cmd == "scramble" => Ok(()),
+            [cmd, subcmd, _family] if cmd == "alg" && subcmd == "list" => Ok(()),
+            [cmd, subcmd, _family, _case_id] if cmd == "alg" && subcmd == "show" => Ok(()),
             [cmd] if cmd == "repl" => Ok(()),
             _ => Err(usage()),
         }

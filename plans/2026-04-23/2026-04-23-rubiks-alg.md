@@ -1,6 +1,6 @@
 # rubiks-alg Implementation Design
 
-**Status:** Phase C 基础实现已完成；当前仅包含最小样例数据，尚未完成全量公式库与 `RandomState3x3`  
+**Status:** Phase C 已完成 `57 OLL + 21 PLL` 公式库、catalog lookup 与 CLI / REPL 公式展示；当前尚未完成 `RandomState3x3`  
 **Goal:** 作为 `rubiks-alg` 的权威设计与进度文档，覆盖公式目录、OLL/PLL case 识别、数据治理、随机打乱接口以及当前实现状态。  
 **Non-goal for this document:** 本文件不直接生成代码，而是记录已经冻结的设计、当前已落地实现和后续补完边界。
 
@@ -21,15 +21,16 @@
 - 已实现 `Catalog`、`AlgCatalog`、`LoadError`、`LookupError`
 - 已实现 vendored `TOML` loader，以及 `Catalog::embedded()` / `Catalog::from_dir(...)`
 - 已实现 OLL / PLL pattern 提取、前置条件校验和 AUF 预展开索引
-- 已加入最小嵌入数据样例：`OLL01` 与 `H`
+- 已录入 `57 OLL + 21 PLL` 全量 vendored `TOML`
 - 已实现 `TrainingFaceTurn`
 - 已接入 `rubiks-cli` 子命令 `scramble [length]` 与 REPL 内置命令 `scramble [length]`
+- 已接入 `rubiks-cli alg list <oll|pll>` 与 `rubiks-cli alg show <oll|pll> <case_id>`
+- 已接入 REPL 内置命令 `alg list <oll|pll>` 与 `alg show <oll|pll> <case_id>`
+- 已提供共享的终端友好公式输出格式，包括对齐列表和简化详情页
 
 当前仍未完成的事：
 
-- 未录入 `PLL 21 + OLL 57` 全量公式数据
 - `RandomState3x3` 仍返回 `ScrambleError::UnsupportedMode`
-- 还没有 `alg list` 或更丰富的公式选择界面
 - 尚未与 `rubiks-solver` 对接
 
 ## 职责边界
@@ -130,6 +131,7 @@ rubiks-alg → rubiks-core
 并且它表示：
 
 - 为了把**当前状态**对齐到该 case 的 canonical 视角，在执行公式前需要先应用的 U 层对齐
+- 若状态满足前置条件但实际上是 `OLL skip` / `PLL skip`，lookup 应返回 `Ok(None)`，而不是伪造一个 case
 
 ## 公开类型与接口
 
@@ -689,12 +691,9 @@ notes = "Manually transcribed from reference material"
 
 ## 当前尚未完成的部分
 
-当前实现已经覆盖 crate 骨架、loader、lookup、最小样例数据和训练用 scramble，但以下工作仍待补完：
+当前实现已经覆盖 crate 骨架、loader、lookup、全量公式数据、CLI / REPL 公式展示和训练用 scramble，但以下工作仍待补完：
 
-- 录入 `PLL 21 + OLL 57` 全量 vendored `TOML`
-- 为每个 case 补齐默认公式与 provenance
 - 实现 `RandomState3x3`
-- 增加 `CLI alg list` 或其他公式浏览入口
 - 与 `rubiks-solver` 做正式对接
 
 ## 测试与验收标准
@@ -742,11 +741,10 @@ notes = "Manually transcribed from reference material"
 
 当前建议按以下顺序继续推进 Phase C：
 
-1. 把最小样例数据扩展为 `PLL 21 + OLL 57` 全量 vendored `TOML`
-2. 为每个 case 校验默认公式、`post_auf` 和 provenance
-3. 在 CLI 中补充公式浏览或查询入口
-4. 实现 `RandomState3x3`
-5. 再评估与 `rubiks-solver` 的接口联动
+1. 实现 `RandomState3x3`
+2. 为公式库补充更多备选公式与标签
+3. 在 CLI / REPL 中补充按公式 id 或标签过滤的浏览能力
+4. 再评估与 `rubiks-solver` 的接口联动
 
 其中：
 

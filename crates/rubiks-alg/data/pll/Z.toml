@@ -1,22 +1,22 @@
-case_id = "H"
-display_name = "H"
+case_id = "Z"
+display_name = "Z"
 
 [pattern]
-corners = ['URF', 'UFL', 'ULB', 'UBR']
-edges = ['UL', 'UB', 'UR', 'UF']
+corners = ['ULB', 'UBR', 'URF', 'UFL']
+edges = ['UB', 'UL', 'UF', 'UR']
 
 [[algorithms]]
-id = "h-default"
+id = "z-default"
 display_name = "Default"
-notation = "M2 U' M2 U2 M2 U' M2"
+notation = "M' U' M2 U' M2 U' M' U2 M2"
 is_default = true
 tags = ["default"]
-post_auf = "I"
+post_auf = "U'"
 notes = "Default algorithm imported from SpeedCubeDB on 2026-04-25"
 
 [algorithms.source]
 kind = "transcribed"
 name = "SpeedCubeDB"
-url = "https://speedcubedb.com/a/3x3/PLL/H"
+url = "https://speedcubedb.com/a/3x3/PLL/Z"
 retrieved_at = "2026-04-25"
 notes = "Transcribed from SpeedCubeDB listing page"

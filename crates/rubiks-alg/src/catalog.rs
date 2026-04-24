@@ -37,8 +37,8 @@ pub struct CaseMatch<'a, T> {
 }
 
 pub trait AlgCatalog {
-    fn lookup_oll(&self, cube: &CubeState) -> Result<CaseMatch<'_, OllCase>, LookupError>;
-    fn lookup_pll(&self, cube: &CubeState) -> Result<CaseMatch<'_, PllCase>, LookupError>;
+    fn lookup_oll(&self, cube: &CubeState) -> Result<Option<CaseMatch<'_, OllCase>>, LookupError>;
+    fn lookup_pll(&self, cube: &CubeState) -> Result<Option<CaseMatch<'_, PllCase>>, LookupError>;
 }
 
 #[derive(Clone, Debug, Default)]
@@ -69,6 +69,22 @@ impl Catalog {
         let pll_files = read_case_files(&pll_root)?;
 
         build_catalog_from_raw(oll_files, pll_files)
+    }
+
+    pub fn oll_cases(&self) -> &[OllCase] {
+        &self.oll_cases
+    }
+
+    pub fn pll_cases(&self) -> &[PllCase] {
+        &self.pll_cases
+    }
+
+    pub fn get_oll_case(&self, case_id: &str) -> Option<&OllCase> {
+        self.oll_cases.iter().find(|case| case.case_id == case_id)
+    }
+
+    pub fn get_pll_case(&self, case_id: &str) -> Option<&PllCase> {
+        self.pll_cases.iter().find(|case| case.case_id == case_id)
     }
 }
 
@@ -112,7 +128,7 @@ fn build_catalog_from_raw(
 }
 
 impl AlgCatalog for Catalog {
-    fn lookup_oll(&self, cube: &CubeState) -> Result<CaseMatch<'_, OllCase>, LookupError> {
+    fn lookup_oll(&self, cube: &CubeState) -> Result<Option<CaseMatch<'_, OllCase>>, LookupError> {
         let parts = cube.parts();
         if !is_f2l_solved(&parts) {
             return Err(LookupError::PrerequisiteNotMet {
@@ -121,17 +137,21 @@ impl AlgCatalog for Catalog {
             });
         }
 
+        if is_oll_solved(&parts) {
+            return Ok(None);
+        }
+
         let pattern = OllPattern::from_parts(&parts);
         let (index, auf) = self.oll_index.get(&pattern).ok_or_else(|| LookupError::CatalogInvariant {
             message: format!("missing OLL pattern {pattern}"),
         })?;
-        Ok(CaseMatch {
+        Ok(Some(CaseMatch {
             case: &self.oll_cases[*index],
             auf: *auf,
-        })
+        }))
     }
 
-    fn lookup_pll(&self, cube: &CubeState) -> Result<CaseMatch<'_, PllCase>, LookupError> {
+    fn lookup_pll(&self, cube: &CubeState) -> Result<Option<CaseMatch<'_, PllCase>>, LookupError> {
         let parts = cube.parts();
         if !is_oll_solved(&parts) {
             return Err(LookupError::PrerequisiteNotMet {
@@ -140,14 +160,18 @@ impl AlgCatalog for Catalog {
             });
         }
 
+        if is_pll_skip(&parts) {
+            return Ok(None);
+        }
+
         let pattern = PllPattern::from_parts(&parts);
         let (index, auf) = self.pll_index.get(&pattern).ok_or_else(|| LookupError::CatalogInvariant {
             message: format!("missing PLL pattern {pattern}"),
         })?;
-        Ok(CaseMatch {
+        Ok(Some(CaseMatch {
             case: &self.pll_cases[*index],
             auf: *auf,
-        })
+        }))
     }
 }
 
@@ -514,6 +538,17 @@ fn is_u_layer_permutation(values: &[u8; 4]) -> bool {
     true
 }
 
+fn is_pll_skip(parts: &CubeStateParts) -> bool {
+    parts.corner_perm[..4]
+        .iter()
+        .enumerate()
+        .all(|(index, &value)| value == index as u8)
+        && parts.edge_perm[..4]
+            .iter()
+            .enumerate()
+            .all(|(index, &value)| value == index as u8)
+}
+
 #[allow(dead_code)]
 fn _parts_debug(parts: &CubeStateParts) -> String {
     format!(
@@ -555,7 +590,11 @@ mod tests {
         fs::create_dir_all(dir.join("oll")).unwrap();
         fs::create_dir_all(dir.join("pll")).unwrap();
         let catalog = Catalog::from_dir(&dir).unwrap();
-        let result = catalog.lookup_oll(&CubeState::solved());
+        let mut parts = CubeState::solved().parts();
+        parts.corner_orient = [0, 1, 1, 1, 0, 0, 0, 0];
+        parts.edge_orient = [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+        let cube = CubeState::try_from_parts(parts).unwrap();
+        let result = catalog.lookup_oll(&cube);
         assert!(matches!(result, Err(LookupError::CatalogInvariant { .. })));
         let _ = fs::remove_dir_all(dir);
     }
@@ -583,12 +622,11 @@ mod tests {
     #[test]
     fn embedded_catalog_loads_minimal_data() {
         let catalog = Catalog::embedded().unwrap();
-        let oll = catalog.lookup_oll(&CubeState::solved()).unwrap();
-        assert_eq!(oll.case.case_id, "OLL01");
-        assert_eq!(oll.auf, Auf::IDENTITY);
-
-        let pll = catalog.lookup_pll(&CubeState::solved()).unwrap();
-        assert_eq!(pll.case.case_id, "H");
-        assert_eq!(pll.auf, Auf::IDENTITY);
+        assert_eq!(catalog.oll_cases.len(), 57);
+        assert_eq!(catalog.pll_cases.len(), 21);
+        assert!(catalog.lookup_oll(&CubeState::solved()).unwrap().is_none());
+        assert!(catalog.lookup_pll(&CubeState::solved()).unwrap().is_none());
+        assert!(catalog.get_oll_case("OLL03").is_some());
+        assert!(catalog.get_pll_case("Aa").is_some());
     }
 }

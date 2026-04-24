@@ -1,8 +1,9 @@
 # rubiks-cli V1 Implementation Plan
 
-**Goal:** 实现首版用户入口 crate，包含基础子命令、交互式 REPL 与 ASCII 展开图渲染。
+**Status:** 已完成基础子命令、REPL、训练用 scramble，以及 CLI / REPL 的 OLL / PLL 公式浏览；当前尚未实现 `solve` 与标准随机状态打乱  
+**Goal:** 实现首版用户入口 crate，包含基础子命令、交互式 REPL、ASCII 展开图渲染与基础公式浏览能力。
 
-**Architecture:** `rubiks-cli` 依赖 `rubiks-core`，并通过 `rubiks-alg` 接入训练用随机打乱。CLI 层持有 `Cube`，通过 `Cube::apply_notation()` 或 `Cube::apply_canonical_sequence()` 驱动状态变化，通过 `Cube::to_facelets()` 驱动渲染。若后续需要动画、逐步回放或公式展示，应优先依赖原始输入文本或 `ExtMoveSequence`，而不是尝试从 canonical `MoveSequence` 反推用户记法。
+**Architecture:** `rubiks-cli` 依赖 `rubiks-core`，并通过 `rubiks-alg` 接入训练用随机打乱与 OLL / PLL 公式目录。CLI 层持有 `Cube`，通过 `Cube::apply_notation()` 或 `Cube::apply_canonical_sequence()` 驱动状态变化，通过 `Cube::to_facelets()` 驱动渲染。若后续需要动画、逐步回放或公式展示，应优先依赖原始输入文本或 `ExtMoveSequence`，而不是尝试从 canonical `MoveSequence` 反推用户记法。
 
 **Tech Stack:** Rust，依赖 `rubiks-core`，并允许为命令行解析与 REPL 引入少量工具型第三方依赖，如 `clap`、`rustyline`
 
@@ -13,6 +14,8 @@
 - `rubiks new`
 - `rubiks apply "<notation>"`
 - `rubiks scramble [length]`
+- `rubiks alg list <oll|pll>`
+- `rubiks alg show <oll|pll> <case_id>`
 - `rubiks repl`
 
 REPL 内置命令：
@@ -22,12 +25,13 @@ REPL 内置命令：
 - `show`
 - `validate`
 - `scramble [length]`
+- `alg list <oll|pll>`
+- `alg show <oll|pll> <case_id>`
 - `help`
 
 当前仍不实现：
 
 - `solve`
-- `alg list`
 
 其中当前 `scramble` 使用的是 `rubiks-alg::TrainingFaceTurn`，还不是 `RandomState3x3`。
 
@@ -45,6 +49,7 @@ rubiks-cli → rubiks-core, rubiks-alg
 
 ```text
 crates/rubiks-cli/src/
+├── alg_output.rs
 ├── main.rs
 ├── render.rs
 └── repl.rs
@@ -94,6 +99,32 @@ crates/rubiks-cli/src/
 - 这是训练用随机面转序列
 - 当前不等价于 WCA / TNoodle 的随机状态打乱
 
+### `rubiks alg list <oll|pll>`
+
+行为：
+
+- 加载嵌入式公式 catalog
+- 以对齐列表形式展示指定 family 的全部 case
+- 当前展示每个 case 的默认公式
+
+说明：
+
+- 输出优先面向终端阅读，而不是暴露内部结构体字段
+- PLL 列表额外展示默认公式的 `post_auf`
+
+### `rubiks alg show <oll|pll> <case_id>`
+
+行为：
+
+- 规范化输入的 case id
+- 加载对应 case
+- 以详情视图展示该 case 下的公式列表
+
+说明：
+
+- 详情页默认不显示内部 `alg.id`
+- 当 `display_name` 与 `case_id` 实际不同的时候才额外展示名称
+
 ## REPL 设计
 
 ### 状态对象
@@ -125,6 +156,8 @@ pub struct ReplState {
 - `show`：重新渲染当前状态
 - `validate`：对 `cube.validate()` 的结果进行显示
 - `scramble [length]`：重置到 solved，生成并应用训练用随机打乱，清空旧 history 后记录新 scramble
+- `alg list <oll|pll>`：打印指定 family 的全部 case 及默认公式
+- `alg show <oll|pll> <case_id>`：打印某个 case 的详情和公式列表
 - `help`：显示帮助
 
 建议 API：
@@ -150,7 +183,8 @@ pub fn handle_input(&mut self, line: &str) -> Result<ReplEvent, ReplError>;
 - REPL 里只操作 `Cube`
 - 不直接暴露 `CubeState` 给用户
 - 当前只接入训练用 `scramble`
-- 不做 solver 或公式浏览入口
+- 当前不做 solver 入口
+- 公式浏览与一次性命令共享展示逻辑，以保证 CLI / REPL 输出一致
 
 ## ASCII 渲染
 
@@ -220,17 +254,21 @@ L L L   F F F   R R R   B B B
 **Files:**
 
 - `crates/rubiks-cli/src/main.rs`
+- `crates/rubiks-cli/src/alg_output.rs`
 
 内容：
 
 - `new`
 - `apply`
 - `scramble`
+- `alg list`
+- `alg show`
 
 说明：
 
 - `apply` 直接从 solved cube 出发
 - `scramble` 通过 `rubiks-alg` 生成训练用随机面转序列
+- `alg_output.rs` 持有 CLI / REPL 共用的公式展示格式化逻辑
 
 ### Task 4：实现 REPL 状态机
 
@@ -257,6 +295,8 @@ L L L   F F F   R R R   B B B
 - `cargo run -p rubiks-cli -- new`
 - `cargo run -p rubiks-cli -- apply "R U R' U'"`
 - `cargo run -p rubiks-cli -- scramble`
+- `cargo run -p rubiks-cli -- alg list pll`
+- `cargo run -p rubiks-cli -- alg show oll 3`
 - `cargo run -p rubiks-cli -- repl`
 
 ## 未来扩展预留
@@ -264,7 +304,7 @@ L L L   F F F   R R R   B B B
 后续仍可继续新增：
 
 - `rubiks solve`
-- `rubiks alg list`
+- `算法筛选 / 搜索 / 标签过滤`
 
 那时再决定：
 
@@ -279,5 +319,5 @@ L L L   F F F   R R R   B B B
 - `cargo build -p rubiks-cli` 无错误
 - `cargo test -p rubiks-cli` 全部通过
 - `cargo clippy -p rubiks-cli` 无警告
-- `rubiks new`、`rubiks apply` 和 `rubiks scramble` 可正常运行
-- REPL 可正确响应 move 输入与内置命令，包括 `scramble [length]`
+- `rubiks new`、`rubiks apply`、`rubiks scramble`、`rubiks alg list` 和 `rubiks alg show` 可正常运行
+- REPL 可正确响应 move 输入与内置命令，包括 `scramble [length]`、`alg list` 与 `alg show`

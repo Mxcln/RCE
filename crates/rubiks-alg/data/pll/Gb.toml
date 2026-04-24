@@ -1,14 +1,14 @@
-case_id = "H"
-display_name = "H"
+case_id = "Gb"
+display_name = "Gb"
 
 [pattern]
-corners = ['URF', 'UFL', 'ULB', 'UBR']
-edges = ['UL', 'UB', 'UR', 'UF']
+corners = ['UBR', 'UFL', 'ULB', 'URF']
+edges = ['UF', 'UB', 'UR', 'UL']
 
 [[algorithms]]
-id = "h-default"
+id = "gb-default"
 display_name = "Default"
-notation = "M2 U' M2 U2 M2 U' M2"
+notation = "D R' U' R U D' R2 U R' U R U' R U' R2"
 is_default = true
 tags = ["default"]
 post_auf = "I"
@@ -17,6 +17,6 @@ notes = "Default algorithm imported from SpeedCubeDB on 2026-04-25"
 [algorithms.source]
 kind = "transcribed"
 name = "SpeedCubeDB"
-url = "https://speedcubedb.com/a/3x3/PLL/H"
+url = "https://speedcubedb.com/a/3x3/PLL/Gb"
 retrieved_at = "2026-04-25"
 notes = "Transcribed from SpeedCubeDB listing page"

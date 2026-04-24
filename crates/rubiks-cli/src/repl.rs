@@ -3,6 +3,7 @@ use std::io::{self, BufRead, Write};
 use rubiks_alg::{ScrambleGenerator, ScrambleMode, TrainingScrambleGenerator};
 use rubiks_core::Cube;
 
+use crate::alg_output::{alg_list_output, alg_show_output};
 use crate::render::ascii;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,6 +54,10 @@ impl ReplState {
             self.history.push(scramble.clone());
 
             return Ok(ReplEvent::PrintAndRender(format!("scramble: {scramble}")));
+        }
+
+        if trimmed == "alg" || trimmed.starts_with("alg ") {
+            return handle_alg_command(trimmed);
         }
 
         match trimmed {
@@ -133,7 +138,7 @@ pub fn run(stdin: impl BufRead, stdout: &mut impl Write) -> io::Result<()> {
 }
 
 fn help_text() -> &'static str {
-    "commands: reset, history, show, validate, scramble [length], help, exit"
+    "commands: reset, history, show, validate, scramble [length], alg list <oll|pll>, alg show <oll|pll> <case_id>, help, exit"
 }
 
 fn parse_scramble_length(rest: &str) -> Result<usize, ReplError> {
@@ -156,6 +161,21 @@ fn parse_scramble_length(rest: &str) -> Result<usize, ReplError> {
     length_text.parse::<usize>().map_err(|_| {
         ReplError::InvalidCommand(format!("invalid scramble length: {length_text}"))
     })
+}
+
+fn handle_alg_command(line: &str) -> Result<ReplEvent, ReplError> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    match parts.as_slice() {
+        ["alg", "list", family] => alg_list_output(family)
+            .map(ReplEvent::Print)
+            .map_err(ReplError::InvalidCommand),
+        ["alg", "show", family, case_id] => alg_show_output(family, case_id)
+            .map(ReplEvent::Print)
+            .map_err(ReplError::InvalidCommand),
+        _ => Err(ReplError::InvalidCommand(
+            "usage: alg list <oll|pll> | alg show <oll|pll> <case_id>".to_string(),
+        )),
+    }
 }
 
 #[cfg(test)]
@@ -212,6 +232,41 @@ mod tests {
         assert_eq!(
             err,
             ReplError::InvalidCommand("invalid scramble length: nope".to_string())
+        );
+    }
+
+    #[test]
+    fn alg_list_command_returns_catalog_output() {
+        let mut state = ReplState::new();
+        let event = state.handle_input("alg list pll").unwrap();
+        match event {
+            ReplEvent::Print(text) => {
+                assert!(text.starts_with("CASE"));
+                assert!(text.contains("Aa"));
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn alg_show_command_returns_case_details() {
+        let mut state = ReplState::new();
+        let event = state.handle_input("alg show oll 3").unwrap();
+        match event {
+            ReplEvent::Print(text) => assert!(text.contains("OLL Case OLL03")),
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn invalid_alg_command_returns_command_error() {
+        let mut state = ReplState::new();
+        let err = state.handle_input("alg show oll").unwrap_err();
+        assert_eq!(
+            err,
+            ReplError::InvalidCommand(
+                "usage: alg list <oll|pll> | alg show <oll|pll> <case_id>".to_string()
+            )
         );
     }
 }

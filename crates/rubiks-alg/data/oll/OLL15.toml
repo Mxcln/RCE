@@ -1,22 +1,21 @@
-case_id = "H"
-display_name = "H"
+case_id = "OLL15"
+display_name = "OLL 15"
 
 [pattern]
-corners = ['URF', 'UFL', 'ULB', 'UBR']
-edges = ['UL', 'UB', 'UR', 'UF']
+corners = [0, 2, 2, 2]
+edges = [0, 1, 0, 1]
 
 [[algorithms]]
-id = "h-default"
+id = "oll15-default"
 display_name = "Default"
-notation = "M2 U' M2 U2 M2 U' M2"
+notation = "r' U' r R' U' R U r' U r"
 is_default = true
 tags = ["default"]
-post_auf = "I"
 notes = "Default algorithm imported from SpeedCubeDB on 2026-04-25"
 
 [algorithms.source]
 kind = "transcribed"
 name = "SpeedCubeDB"
-url = "https://speedcubedb.com/a/3x3/PLL/H"
+url = "https://speedcubedb.com/a/3x3/OLL/OLL_15"
 retrieved_at = "2026-04-25"
 notes = "Transcribed from SpeedCubeDB listing page"

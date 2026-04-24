@@ -1,15 +1,15 @@
 # rubiks-cli V1 Implementation Plan
 
-**Status:** 已完成基础子命令、REPL、训练用 scramble，以及 CLI / REPL 的 OLL / PLL 公式浏览；当前尚未实现 `solve` 与标准随机状态打乱  
-**Goal:** 实现首版用户入口 crate，包含基础子命令、交互式 REPL、ASCII 展开图渲染与基础公式浏览能力。
+**Status:** 已完成基础子命令、REPL、训练用 scramble，以及 CLI / REPL 的 OLL / PLL 公式浏览；当前下一里程碑聚焦一次性 `solve` 命令，标准随机状态打乱与 REPL 内 `solve` 仍未实现  
+**Goal:** 实现首版用户入口 crate，包含基础子命令、交互式 REPL、ASCII 展开图渲染、基础公式浏览，以及首个通用 solver 入口。
 
-**Architecture:** `rubiks-cli` 依赖 `rubiks-core`，并通过 `rubiks-alg` 接入训练用随机打乱与 OLL / PLL 公式目录。CLI 层持有 `Cube`，通过 `Cube::apply_notation()` 或 `Cube::apply_canonical_sequence()` 驱动状态变化，通过 `Cube::to_facelets()` 驱动渲染。若后续需要动画、逐步回放或公式展示，应优先依赖原始输入文本或 `ExtMoveSequence`，而不是尝试从 canonical `MoveSequence` 反推用户记法。
+**Architecture:** `rubiks-cli` 的基础命令依赖 `rubiks-core`，并通过 `rubiks-alg` 接入训练用随机打乱与 OLL / PLL 公式目录；`solve` 命令只依赖 facade crate `crates/solver/rubiks-solver`。CLI 层继续持有 `Cube`，通过 `Cube::apply_notation()` 或 `Cube::apply_canonical_sequence()` 驱动状态变化，通过 `Cube::to_facelets()` 驱动渲染；在 `solve` 路径上，CLI 从 solved `Cube` 应用输入记法得到目标状态，再把 `cube.state()` 交给 `rubiks-solver` 的统一入口，由 solver 层决定默认 solver、解析 `SolverKind` 并分发到具体实现。若后续需要动画、逐步回放或公式展示，应优先依赖原始输入文本或 `ExtMoveSequence`，而不是尝试从 canonical `MoveSequence` 反推用户记法。
 
-**Tech Stack:** Rust，依赖 `rubiks-core`，并允许为命令行解析与 REPL 引入少量工具型第三方依赖，如 `clap`、`rustyline`
+**Tech Stack:** Rust，当前依赖 `rubiks-core`、`rubiks-alg`、`rubiks-solver`；仍允许为命令行解析与 REPL 引入少量工具型第三方依赖，如 `clap`、`rustyline`，但当前 solve 里程碑不主动引入它们。
 
-## 首版范围
+## 当前范围
 
-首版只实现：
+当前已实现：
 
 - `rubiks new`
 - `rubiks apply "<notation>"`
@@ -17,6 +17,11 @@
 - `rubiks alg list <oll|pll>`
 - `rubiks alg show <oll|pll> <case_id>`
 - `rubiks repl`
+
+当前下一里程碑新增：
+
+- `rubiks solve "<notation>"`
+- `rubiks solve --solver kociemba "<notation>"`
 
 REPL 内置命令：
 
@@ -31,19 +36,22 @@ REPL 内置命令：
 
 当前仍不实现：
 
-- `solve`
+- `solve --backend ...`
+- solver backend / timeout / diagnostics 参数
 
 其中当前 `scramble` 使用的是 `rubiks-alg::TrainingFaceTurn`，还不是 `RandomState3x3`。
 
 ## 依赖关系
 
 ```text
-rubiks-cli → rubiks-core, rubiks-alg
+rubiks-cli → rubiks-core, rubiks-alg, rubiks-solver
 ```
 
-不依赖：
+说明：
 
-- `rubiks-solver`
+- `new` / `apply` / `scramble` / `alg` / `repl` 仍主要建立在 `rubiks-core` 与 `rubiks-alg` 之上
+- `solve` 当前通过 `rubiks-solver` 的 facade 入口接入默认 solver
+- `SolverKind`、默认 solver 策略、solver 名称解析不再放在 CLI 层
 
 ## 建议模块结构
 
@@ -54,6 +62,11 @@ crates/rubiks-cli/src/
 ├── render.rs
 └── repl.rs
 ```
+
+说明：
+
+- 当前可继续保持现有模块结构
+- CLI 当前不再承载 solver 选择分发逻辑
 
 ## 子命令设计
 
@@ -75,6 +88,26 @@ crates/rubiks-cli/src/
 用途：
 
 - 快速验证 `rubiks-core` 的 parser、orientation 与渲染链路
+
+### `rubiks solve [--solver <name>] "<notation>"`
+
+行为：
+
+- 从还原状态开始
+- 应用一段扩展记法得到目标状态
+- 将 `cube.state()` 交给 `rubiks-solver` 的统一入口
+- 默认使用 `SolverKind::default()`
+- 输出 `scramble`、`solver`、`solution` 与 `length`
+
+说明：
+
+- 当前 facade 只真正支持 `kociemba`
+- `--solver kociemba` 与不写参数的默认行为等价
+- `--solver cfop` 当前返回“未实现”错误
+- 首版继续沿用手写 `env::args()` 分发，不为单一命令提前引入 `clap`
+- 当前只暴露 solver 选择，不暴露 backend / timeout / diagnostics 参数
+- 若输入已经是 solved 状态，CLI 可直接短路输出空解而不调用 backend
+- 首版默认不再渲染最终 solved 展开图，以避免重复输出几乎无信息量的还原态
 
 ### `rubiks repl`
 
@@ -159,6 +192,7 @@ pub struct ReplState {
 - `alg list <oll|pll>`：打印指定 family 的全部 case 及默认公式
 - `alg show <oll|pll> <case_id>`：打印某个 case 的详情和公式列表
 - `help`：显示帮助
+- `solve`：对当前状态求解但不自动应用结果，支持 `solve` 与 `solve kociemba`
 
 建议 API：
 
@@ -183,7 +217,7 @@ pub fn handle_input(&mut self, line: &str) -> Result<ReplEvent, ReplError>;
 - REPL 里只操作 `Cube`
 - 不直接暴露 `CubeState` 给用户
 - 当前只接入训练用 `scramble`
-- 当前不做 solver 入口
+- solver 选择分发由 `rubiks-solver` 负责，REPL 只解析命令形状
 - 公式浏览与一次性命令共享展示逻辑，以保证 CLI / REPL 输出一致
 
 ## ASCII 渲染
@@ -290,10 +324,40 @@ L L L   F F F   R R R   B B B
 
 ### Task 5：端到端验证
 
+### Task 5：接入一次性 `solve` 子命令
+
+**Files:**
+
+- `crates/rubiks-cli/Cargo.toml`
+- `crates/rubiks-cli/src/main.rs`
+- `crates/solver/rubiks-solver/src/lib.rs`
+- `crates/solver/rubiks-solver/src/registry.rs`
+
+依赖：
+
+- `rubiks-solver`
+
+内容：
+
+- 新增 `solve [--solver <name>] "<notation>"` 分支
+- 将从 solved cube 应用 notation 得到的 `CubeState` 交给 solver facade
+- 统一格式化输出 `scramble` / `solver` / `solution` / `length`
+- 将 `SolverKind`、默认 solver 和 solver 分发放入 `rubiks-solver`
+
+要求：
+
+- 继续沿用手写 `env::args()` 分发
+- 当前只暴露 solver 选择，不暴露 backend / timeout / diagnostics 参数
+- 若输入已经 solved，可直接短路输出空解
+
+### Task 6：端到端验证
+
 验证流程：
 
 - `cargo run -p rubiks-cli -- new`
 - `cargo run -p rubiks-cli -- apply "R U R' U'"`
+- `cargo run -p rubiks-cli -- solve "R U R' U'"`
+- `cargo run -p rubiks-cli -- solve --solver kociemba "R U R' U'"`
 - `cargo run -p rubiks-cli -- scramble`
 - `cargo run -p rubiks-cli -- alg list pll`
 - `cargo run -p rubiks-cli -- alg show oll 3`
@@ -303,14 +367,17 @@ L L L   F F F   R R R   B B B
 
 后续仍可继续新增：
 
-- `rubiks solve`
+- `rubiks solve --solver <kociemba|cfop>`
+- `rubiks solve --backend <inprocess|external>`
+- `rubiks solve --timeout ...`
+- `rubiks solve --diagnostics`
 - `算法筛选 / 搜索 / 标签过滤`
 
 那时再决定：
 
-- 子命令命名
 - 输出格式
 - phase 展示方式
+- REPL 中 `solve` 是否默认自动应用结果
 
 当前仍建议避免把训练用 `scramble` 误写成标准随机状态打乱。
 
@@ -319,5 +386,5 @@ L L L   F F F   R R R   B B B
 - `cargo build -p rubiks-cli` 无错误
 - `cargo test -p rubiks-cli` 全部通过
 - `cargo clippy -p rubiks-cli` 无警告
-- `rubiks new`、`rubiks apply`、`rubiks scramble`、`rubiks alg list` 和 `rubiks alg show` 可正常运行
-- REPL 可正确响应 move 输入与内置命令，包括 `scramble [length]`、`alg list` 与 `alg show`
+- `rubiks new`、`rubiks apply`、`rubiks solve`、`rubiks scramble`、`rubiks alg list` 和 `rubiks alg show` 可正常运行
+- REPL 可正确响应 move 输入与内置命令，包括 `solve` / `solve kociemba`、`scramble [length]`、`alg list` 与 `alg show`

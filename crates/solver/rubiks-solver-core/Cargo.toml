@@ -1,0 +1,7 @@
+[package]
+name = "rubiks-solver-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rubiks-core = { path = "../../rubiks-core" }

@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 rubiks-alg = { path = "../rubiks-alg" }
 rubiks-core = { path = "../rubiks-core" }
+rubiks-solver = { path = "../solver/rubiks-solver" }

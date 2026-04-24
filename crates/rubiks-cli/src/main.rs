@@ -7,6 +7,7 @@ use std::io::{self, BufReader};
 
 use rubiks_alg::{ScrambleGenerator, ScrambleMode, TrainingScrambleGenerator};
 use rubiks_core::Cube;
+use rubiks_solver::{solve_state, SolveOptions, SolverKind};
 
 use crate::alg_output::{alg_list_output, alg_show_output};
 use crate::render::ascii;
@@ -30,6 +31,17 @@ fn try_main() -> Result<(), String> {
             let mut cube = Cube::solved();
             cube.apply_notation(notation).map_err(|err| err.to_string())?;
             println!("{}", ascii(&cube));
+            Ok(())
+        }
+        [cmd, notation] if cmd == "solve" => {
+            let output = solve_output(notation, SolverKind::default())?;
+            println!("{output}");
+            Ok(())
+        }
+        [cmd, flag, solver_name, notation] if cmd == "solve" && flag == "--solver" => {
+            let solver_kind = SolverKind::parse(solver_name)?;
+            let output = solve_output(notation, solver_kind)?;
+            println!("{output}");
             Ok(())
         }
         [cmd] if cmd == "scramble" => {
@@ -63,7 +75,7 @@ fn try_main() -> Result<(), String> {
 }
 
 fn usage() -> &'static str {
-    "usage:\n  rubiks-cli new\n  rubiks-cli apply \"<notation>\"\n  rubiks-cli scramble [length]\n  rubiks-cli alg list <oll|pll>\n  rubiks-cli alg show <oll|pll> <case_id>\n  rubiks-cli repl"
+    "usage:\n  rubiks-cli new\n  rubiks-cli apply \"<notation>\"\n  rubiks-cli solve [--solver <name>] \"<notation>\"\n  rubiks-cli scramble [length]\n  rubiks-cli alg list <oll|pll>\n  rubiks-cli alg show <oll|pll> <case_id>\n  rubiks-cli repl"
 }
 
 fn parse_length(input: &str) -> Result<usize, String> {
@@ -82,6 +94,33 @@ fn scramble_output(length: usize) -> Result<String, rubiks_alg::ScrambleError> {
     Ok(format!("scramble: {}\n\n{}", sequence.to_notation(), ascii(&cube)))
 }
 
+fn solve_output(notation: &str, solver_kind: SolverKind) -> Result<String, String> {
+    let mut cube = Cube::solved();
+    cube.apply_notation(notation).map_err(|err| err.to_string())?;
+
+    let summary = solve_state(cube.state(), solver_kind, &SolveOptions::default())
+        .map_err(|err| err.to_string())?;
+    Ok(format_solve_output(notation, &summary))
+}
+
+fn format_solve_output(scramble: &str, summary: &rubiks_solver::SolveSummary) -> String {
+    format!(
+        "{}\nsolver: {}\n{}\nlength: {}",
+        labeled_line("scramble", scramble),
+        summary.solver_name,
+        labeled_line("solution", &summary.solution),
+        summary.length,
+    )
+}
+
+fn labeled_line(label: &str, value: &str) -> String {
+    if value.is_empty() {
+        format!("{label}:")
+    } else {
+        format!("{label}: {value}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,6 +135,8 @@ mod tests {
         match args.as_slice() {
             [cmd] if cmd == "new" => Ok(()),
             [cmd, _notation] if cmd == "apply" => Ok(()),
+            [cmd, _notation] if cmd == "solve" => Ok(()),
+            [cmd, flag, _solver_name, _notation] if cmd == "solve" && flag == "--solver" => Ok(()),
             [cmd] if cmd == "scramble" => Ok(()),
             [cmd, _length] if cmd == "scramble" => Ok(()),
             [cmd, subcmd, _family] if cmd == "alg" && subcmd == "list" => Ok(()),
@@ -110,6 +151,30 @@ mod tests {
         let output = scramble_output(5).unwrap();
         assert!(output.starts_with("scramble: "));
         assert!(output.contains("\n\n"));
+    }
+
+    #[test]
+    fn solve_output_includes_solver_solution_and_length() {
+        let output = solve_output("R U R' U'", SolverKind::default()).unwrap();
+        assert!(output.contains("scramble: R U R' U'"));
+        assert!(output.contains("solver: kociemba"));
+        assert!(output.contains("solution: "));
+        assert!(output.contains("length: 4"));
+    }
+
+    #[test]
+    fn solve_output_short_circuits_solved_states() {
+        let output = solve_output("x", SolverKind::default()).unwrap();
+        assert!(output.contains("scramble: x"));
+        assert!(output.contains("solver: kociemba"));
+        assert!(output.lines().any(|line| line == "solution:"));
+        assert!(output.contains("length: 0"));
+    }
+
+    #[test]
+    fn solve_output_supports_explicit_solver_selection() {
+        let output = solve_output("R U R' U'", SolverKind::parse("kociemba").unwrap()).unwrap();
+        assert!(output.contains("solver: kociemba"));
     }
 
     #[test]

@@ -2,6 +2,7 @@ use std::io::{self, BufRead, Write};
 
 use rubiks_alg::{ScrambleGenerator, ScrambleMode, TrainingScrambleGenerator};
 use rubiks_core::Cube;
+use rubiks_solver::{solve_state, SolveOptions, SolverKind};
 
 use crate::alg_output::{alg_list_output, alg_show_output};
 use crate::render::ascii;
@@ -24,6 +25,7 @@ pub enum ReplEvent {
 pub enum ReplError {
     InvalidCommand(String),
     InvalidNotation(String),
+    SolveFailed(String),
 }
 
 impl ReplState {
@@ -54,6 +56,10 @@ impl ReplState {
             self.history.push(scramble.clone());
 
             return Ok(ReplEvent::PrintAndRender(format!("scramble: {scramble}")));
+        }
+
+        if trimmed == "solve" || trimmed.starts_with("solve ") {
+            return handle_solve_command(self, trimmed);
         }
 
         if trimmed == "alg" || trimmed.starts_with("alg ") {
@@ -128,9 +134,9 @@ pub fn run(stdin: impl BufRead, stdout: &mut impl Write) -> io::Result<()> {
                 writeln!(stdout, "bye")?;
                 break;
             }
-            Err(ReplError::InvalidCommand(err)) | Err(ReplError::InvalidNotation(err)) => {
-                writeln!(stdout, "error: {err}")?
-            }
+            Err(ReplError::InvalidCommand(err))
+            | Err(ReplError::InvalidNotation(err))
+            | Err(ReplError::SolveFailed(err)) => writeln!(stdout, "error: {err}")?,
         }
     }
 
@@ -138,7 +144,7 @@ pub fn run(stdin: impl BufRead, stdout: &mut impl Write) -> io::Result<()> {
 }
 
 fn help_text() -> &'static str {
-    "commands: reset, history, show, validate, scramble [length], alg list <oll|pll>, alg show <oll|pll> <case_id>, help, exit"
+    "commands: reset, history, show, validate, solve, scramble [length], alg list <oll|pll>, alg show <oll|pll> <case_id>, help, exit"
 }
 
 fn parse_scramble_length(rest: &str) -> Result<usize, ReplError> {
@@ -175,6 +181,38 @@ fn handle_alg_command(line: &str) -> Result<ReplEvent, ReplError> {
         _ => Err(ReplError::InvalidCommand(
             "usage: alg list <oll|pll> | alg show <oll|pll> <case_id>".to_string(),
         )),
+    }
+}
+
+fn handle_solve_command(state: &ReplState, line: &str) -> Result<ReplEvent, ReplError> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    let solver_kind = match parts.as_slice() {
+        ["solve"] => SolverKind::default(),
+        ["solve", solver_name] => {
+            SolverKind::parse(solver_name).map_err(ReplError::InvalidCommand)?
+        }
+        _ => return Err(ReplError::InvalidCommand("usage: solve [solver]".to_string())),
+    };
+
+    let summary = solve_state(state.cube.state(), solver_kind, &SolveOptions::default())
+        .map_err(|err| ReplError::SolveFailed(err.to_string()))?;
+    Ok(ReplEvent::Print(format_repl_solve_output(&summary)))
+}
+
+fn format_repl_solve_output(summary: &rubiks_solver::SolveSummary) -> String {
+    format!(
+        "solver: {}\n{}\nlength: {}",
+        summary.solver_name,
+        labeled_line("solution", &summary.solution),
+        summary.length,
+    )
+}
+
+fn labeled_line(label: &str, value: &str) -> String {
+    if value.is_empty() {
+        format!("{label}:")
+    } else {
+        format!("{label}: {value}")
     }
 }
 
@@ -267,6 +305,76 @@ mod tests {
             ReplError::InvalidCommand(
                 "usage: alg list <oll|pll> | alg show <oll|pll> <case_id>".to_string()
             )
+        );
+    }
+
+    #[test]
+    fn solve_returns_solution_without_mutating_state() {
+        let mut state = ReplState::new();
+        state.handle_input("R U R' U'").unwrap();
+
+        let cube_before = state.cube.clone();
+        let history_before = state.history.clone();
+
+        let event = state.handle_input("solve").unwrap();
+        match event {
+            ReplEvent::Print(text) => {
+                assert!(text.contains("solver: kociemba"));
+                assert!(text.contains("solution: "));
+                assert!(text.contains("length: 4"));
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+
+        assert_eq!(state.cube, cube_before);
+        assert_eq!(state.history, history_before);
+        assert!(!state.cube.is_solved());
+    }
+
+    #[test]
+    fn solve_on_solved_state_returns_empty_solution() {
+        let mut state = ReplState::new();
+        let event = state.handle_input("solve").unwrap();
+
+        match event {
+            ReplEvent::Print(text) => {
+                assert!(text.contains("solver: kociemba"));
+                assert!(text.lines().any(|line| line == "solution:"));
+                assert!(text.contains("length: 0"));
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn solve_rejects_extra_arguments() {
+        let mut state = ReplState::new();
+        let err = state.handle_input("solve now").unwrap_err();
+        assert_eq!(
+            err,
+            ReplError::InvalidCommand("unknown solver: now (available: kociemba)".to_string())
+        );
+    }
+
+    #[test]
+    fn solve_accepts_explicit_solver_name() {
+        let mut state = ReplState::new();
+        state.handle_input("R U R' U'").unwrap();
+
+        let event = state.handle_input("solve kociemba").unwrap();
+        match event {
+            ReplEvent::Print(text) => assert!(text.contains("solver: kociemba")),
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn solve_reports_unimplemented_solver_name() {
+        let mut state = ReplState::new();
+        let err = state.handle_input("solve cfop").unwrap_err();
+        assert_eq!(
+            err,
+            ReplError::InvalidCommand("solver not yet implemented: cfop".to_string())
         );
     }
 }

@@ -1,0 +1,9 @@
+[package]
+name = "rubiks-solver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rubiks-core = { path = "../../rubiks-core" }
+rubiks-solver-core = { path = "../rubiks-solver-core" }
+rubiks-solver-kociemba = { path = "../rubiks-solver-kociemba" }

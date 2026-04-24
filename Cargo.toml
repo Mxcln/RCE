@@ -3,5 +3,8 @@ members = [
     "crates/rubiks-core",
     "crates/rubiks-cli",
     "crates/rubiks-alg",
+    "crates/solver/rubiks-solver-core",
+    "crates/solver/rubiks-solver",
+    "crates/solver/rubiks-solver-kociemba",
 ]
 resolver = "2"

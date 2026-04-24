@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/rubiks-core",
+    "crates/rubiks-solver",
+]
+resolver = "2"

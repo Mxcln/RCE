@@ -4,6 +4,7 @@ mod repl;
 use std::env;
 use std::io::{self, BufReader};
 
+use rubiks_alg::{ScrambleGenerator, ScrambleMode, TrainingScrambleGenerator};
 use rubiks_core::Cube;
 
 use crate::render::ascii;
@@ -29,6 +30,17 @@ fn try_main() -> Result<(), String> {
             println!("{}", ascii(&cube));
             Ok(())
         }
+        [cmd] if cmd == "scramble" => {
+            let output = scramble_output(25).map_err(|err| err.to_string())?;
+            println!("{output}");
+            Ok(())
+        }
+        [cmd, length] if cmd == "scramble" => {
+            let length = parse_length(length)?;
+            let output = scramble_output(length).map_err(|err| err.to_string())?;
+            println!("{output}");
+            Ok(())
+        }
         [cmd] if cmd == "repl" => {
             let stdin = io::stdin();
             let mut stdout = io::stdout();
@@ -39,7 +51,23 @@ fn try_main() -> Result<(), String> {
 }
 
 fn usage() -> &'static str {
-    "usage:\n  rubiks-cli new\n  rubiks-cli apply \"<notation>\"\n  rubiks-cli repl"
+    "usage:\n  rubiks-cli new\n  rubiks-cli apply \"<notation>\"\n  rubiks-cli scramble [length]\n  rubiks-cli repl"
+}
+
+fn parse_length(input: &str) -> Result<usize, String> {
+    input
+        .parse::<usize>()
+        .map_err(|_| format!("invalid scramble length: {input}"))
+}
+
+fn scramble_output(length: usize) -> Result<String, rubiks_alg::ScrambleError> {
+    let generator = TrainingScrambleGenerator;
+    let sequence = generator.generate(ScrambleMode::TrainingFaceTurn { length })?;
+
+    let mut cube = Cube::solved();
+    cube.apply_canonical_sequence(&sequence);
+
+    Ok(format!("scramble: {}\n\n{}", sequence.to_notation(), ascii(&cube)))
 }
 
 #[cfg(test)]
@@ -56,8 +84,22 @@ mod tests {
         match args.as_slice() {
             [cmd] if cmd == "new" => Ok(()),
             [cmd, _notation] if cmd == "apply" => Ok(()),
+            [cmd] if cmd == "scramble" => Ok(()),
+            [cmd, _length] if cmd == "scramble" => Ok(()),
             [cmd] if cmd == "repl" => Ok(()),
             _ => Err(usage()),
         }
+    }
+
+    #[test]
+    fn scramble_output_includes_sequence_and_render() {
+        let output = scramble_output(5).unwrap();
+        assert!(output.starts_with("scramble: "));
+        assert!(output.contains("\n\n"));
+    }
+
+    #[test]
+    fn parse_length_rejects_invalid_values() {
+        assert!(parse_length("abc").is_err());
     }
 }

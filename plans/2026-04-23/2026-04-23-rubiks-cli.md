@@ -2,7 +2,7 @@
 
 **Goal:** 实现首版用户入口 crate，包含基础子命令、交互式 REPL 与 ASCII 展开图渲染。
 
-**Architecture:** `rubiks-cli` 只依赖 `rubiks-core`。CLI 层持有 `Cube`，通过 `Cube::apply_notation()` 驱动状态变化，通过 `Cube::to_facelets()` 驱动渲染。若后续需要动画、逐步回放或公式展示，应优先依赖原始输入文本或 `ExtMoveSequence`，而不是尝试从 canonical `MoveSequence` 反推用户记法。
+**Architecture:** `rubiks-cli` 依赖 `rubiks-core`，并通过 `rubiks-alg` 接入训练用随机打乱。CLI 层持有 `Cube`，通过 `Cube::apply_notation()` 或 `Cube::apply_canonical_sequence()` 驱动状态变化，通过 `Cube::to_facelets()` 驱动渲染。若后续需要动画、逐步回放或公式展示，应优先依赖原始输入文本或 `ExtMoveSequence`，而不是尝试从 canonical `MoveSequence` 反推用户记法。
 
 **Tech Stack:** Rust，依赖 `rubiks-core`，并允许为命令行解析与 REPL 引入少量工具型第三方依赖，如 `clap`、`rustyline`
 
@@ -12,6 +12,7 @@
 
 - `rubiks new`
 - `rubiks apply "<notation>"`
+- `rubiks scramble [length]`
 - `rubiks repl`
 
 REPL 内置命令：
@@ -20,25 +21,24 @@ REPL 内置命令：
 - `history`
 - `show`
 - `validate`
+- `scramble [length]`
 - `help`
 
-首版明确不实现：
+当前仍不实现：
 
 - `solve`
-- `scramble`
 - `alg list`
 
-这些命令等 `rubiks-alg` / `rubiks-solver` 真正实现后再设计。
+其中当前 `scramble` 使用的是 `rubiks-alg::TrainingFaceTurn`，还不是 `RandomState3x3`。
 
 ## 依赖关系
 
 ```text
-rubiks-cli → rubiks-core
+rubiks-cli → rubiks-core, rubiks-alg
 ```
 
 不依赖：
 
-- `rubiks-alg`
 - `rubiks-solver`
 
 ## 建议模块结构
@@ -79,6 +79,21 @@ crates/rubiks-cli/src/
 - 维护一个 `ReplState`
 - 每次输入后渲染当前魔方
 
+### `rubiks scramble [length]`
+
+行为：
+
+- 使用 `TrainingScrambleGenerator`
+- 默认长度为 `25`
+- 输出 `scramble: ...`
+- 从 solved 状态应用这串 canonical moves
+- 渲染打乱后的 ASCII 展开图
+
+说明：
+
+- 这是训练用随机面转序列
+- 当前不等价于 WCA / TNoodle 的随机状态打乱
+
 ## REPL 设计
 
 ### 状态对象
@@ -109,6 +124,7 @@ pub struct ReplState {
 - `history`：显示输入历史
 - `show`：重新渲染当前状态
 - `validate`：对 `cube.validate()` 的结果进行显示
+- `scramble [length]`：重置到 solved，生成并应用训练用随机打乱，清空旧 history 后记录新 scramble
 - `help`：显示帮助
 
 建议 API：
@@ -117,6 +133,7 @@ pub struct ReplState {
 pub enum ReplEvent {
     Render,
     Print(String),
+    PrintAndRender(String),
     Exit,
 }
 
@@ -132,7 +149,8 @@ pub fn handle_input(&mut self, line: &str) -> Result<ReplEvent, ReplError>;
 
 - REPL 里只操作 `Cube`
 - 不直接暴露 `CubeState` 给用户
-- 不做 solver / alg / scramble 入口占位
+- 当前只接入训练用 `scramble`
+- 不做 solver 或公式浏览入口
 
 ## ASCII 渲染
 
@@ -179,8 +197,7 @@ L L L   F F F   R R R   B B B
 依赖：
 
 - `rubiks-core`
-- `clap`
-- `rustyline`
+- `rubiks-alg`
 
 ### Task 2：实现渲染模块
 
@@ -208,11 +225,12 @@ L L L   F F F   R R R   B B B
 
 - `new`
 - `apply`
+- `scramble`
 
 说明：
 
 - `apply` 直接从 solved cube 出发
-- 不需要也不应该依赖 `rubiks-alg`
+- `scramble` 通过 `rubiks-alg` 生成训练用随机面转序列
 
 ### Task 4：实现 REPL 状态机
 
@@ -238,13 +256,13 @@ L L L   F F F   R R R   B B B
 
 - `cargo run -p rubiks-cli -- new`
 - `cargo run -p rubiks-cli -- apply "R U R' U'"`
+- `cargo run -p rubiks-cli -- scramble`
 - `cargo run -p rubiks-cli -- repl`
 
 ## 未来扩展预留
 
-当 `rubiks-alg` / `rubiks-solver` 进入实现阶段后，CLI 才考虑新增：
+后续仍可继续新增：
 
-- `rubiks scramble`
 - `rubiks solve`
 - `rubiks alg list`
 
@@ -254,12 +272,12 @@ L L L   F F F   R R R   B B B
 - 输出格式
 - phase 展示方式
 
-当前不要在首版里做占位实现。
+当前仍建议避免把训练用 `scramble` 误写成标准随机状态打乱。
 
 ## 完成标准
 
 - `cargo build -p rubiks-cli` 无错误
 - `cargo test -p rubiks-cli` 全部通过
 - `cargo clippy -p rubiks-cli` 无警告
-- `rubiks new` 和 `rubiks apply` 可正常运行
-- REPL 可正确响应 move 输入与内置命令
+- `rubiks new`、`rubiks apply` 和 `rubiks scramble` 可正常运行
+- REPL 可正确响应 move 输入与内置命令，包括 `scramble [length]`

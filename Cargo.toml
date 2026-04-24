@@ -2,5 +2,6 @@
 members = [
     "crates/rubiks-core",
     "crates/rubiks-cli",
+    "crates/rubiks-alg",
 ]
 resolver = "2"

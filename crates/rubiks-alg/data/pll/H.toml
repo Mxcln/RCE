@@ -1,0 +1,20 @@
+case_id = "H"
+display_name = "Solved PLL"
+
+[pattern]
+corners = ["URF", "UFL", "ULB", "UBR"]
+edges = ["UR", "UF", "UL", "UB"]
+
+[[algorithms]]
+id = "pll-h-identity"
+display_name = "Identity"
+notation = ""
+is_default = true
+tags = ["identity", "test"]
+post_auf = "I"
+notes = "Minimal embedded test data"
+
+[algorithms.source]
+kind = "original"
+name = "RCE"
+notes = "Minimal embedded sample"

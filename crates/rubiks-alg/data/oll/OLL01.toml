@@ -1,0 +1,19 @@
+case_id = "OLL01"
+display_name = "Solved OLL"
+
+[pattern]
+corners = [0, 0, 0, 0]
+edges = [0, 0, 0, 0]
+
+[[algorithms]]
+id = "oll01-identity"
+display_name = "Identity"
+notation = ""
+is_default = true
+tags = ["identity", "test"]
+notes = "Minimal embedded test data"
+
+[algorithms.source]
+kind = "original"
+name = "RCE"
+notes = "Minimal embedded sample"

@@ -1,5 +1,6 @@
 use std::io::{self, BufRead, Write};
 
+use rubiks_alg::{ScrambleGenerator, ScrambleMode, TrainingScrambleGenerator};
 use rubiks_core::Cube;
 
 use crate::render::ascii;
@@ -14,11 +15,13 @@ pub struct ReplState {
 pub enum ReplEvent {
     Render,
     Print(String),
+    PrintAndRender(String),
     Exit,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReplError {
+    InvalidCommand(String),
     InvalidNotation(String),
 }
 
@@ -34,6 +37,22 @@ impl ReplState {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             return Ok(ReplEvent::Print(String::new()));
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("scramble") {
+            let length = parse_scramble_length(rest)?;
+            let generator = TrainingScrambleGenerator;
+            let sequence = generator
+                .generate(ScrambleMode::TrainingFaceTurn { length })
+                .map_err(|err| ReplError::InvalidCommand(err.to_string()))?;
+
+            let scramble = sequence.to_notation();
+            self.cube.reset();
+            self.history.clear();
+            self.cube.apply_canonical_sequence(&sequence);
+            self.history.push(scramble.clone());
+
+            return Ok(ReplEvent::PrintAndRender(format!("scramble: {scramble}")));
         }
 
         match trimmed {
@@ -94,11 +113,19 @@ pub fn run(stdin: impl BufRead, stdout: &mut impl Write) -> io::Result<()> {
                     writeln!(stdout, "{text}")?;
                 }
             }
+            Ok(ReplEvent::PrintAndRender(text)) => {
+                if !text.is_empty() {
+                    writeln!(stdout, "{text}")?;
+                }
+                writeln!(stdout, "{}", ascii(&state.cube))?;
+            }
             Ok(ReplEvent::Exit) => {
                 writeln!(stdout, "bye")?;
                 break;
             }
-            Err(ReplError::InvalidNotation(err)) => writeln!(stdout, "error: {err}")?,
+            Err(ReplError::InvalidCommand(err)) | Err(ReplError::InvalidNotation(err)) => {
+                writeln!(stdout, "error: {err}")?
+            }
         }
     }
 
@@ -106,7 +133,29 @@ pub fn run(stdin: impl BufRead, stdout: &mut impl Write) -> io::Result<()> {
 }
 
 fn help_text() -> &'static str {
-    "commands: reset, history, show, validate, help, exit"
+    "commands: reset, history, show, validate, scramble [length], help, exit"
+}
+
+fn parse_scramble_length(rest: &str) -> Result<usize, ReplError> {
+    let trimmed = rest.trim();
+    if trimmed.is_empty() {
+        return Ok(25);
+    }
+
+    let mut parts = trimmed.split_whitespace();
+    let Some(length_text) = parts.next() else {
+        return Ok(25);
+    };
+
+    if parts.next().is_some() {
+        return Err(ReplError::InvalidCommand(
+            "usage: scramble [length]".to_string(),
+        ));
+    }
+
+    length_text.parse::<usize>().map_err(|_| {
+        ReplError::InvalidCommand(format!("invalid scramble length: {length_text}"))
+    })
 }
 
 #[cfg(test)]
@@ -143,5 +192,26 @@ mod tests {
         let mut state = ReplState::new();
         let err = state.handle_input("?").unwrap_err();
         assert!(matches!(err, ReplError::InvalidNotation(_)));
+    }
+
+    #[test]
+    fn scramble_resets_cube_and_records_generated_sequence() {
+        let mut state = ReplState::new();
+        state.handle_input("R U").unwrap();
+
+        let event = state.handle_input("scramble 1").unwrap();
+        assert!(matches!(event, ReplEvent::PrintAndRender(_)));
+        assert_eq!(state.history.len(), 1);
+        assert!(!state.cube.is_solved());
+    }
+
+    #[test]
+    fn invalid_scramble_length_returns_command_error() {
+        let mut state = ReplState::new();
+        let err = state.handle_input("scramble nope").unwrap_err();
+        assert_eq!(
+            err,
+            ReplError::InvalidCommand("invalid scramble length: nope".to_string())
+        );
     }
 }

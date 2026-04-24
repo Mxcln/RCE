@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "crates/rubiks-core",
+    "crates/rubiks-cli",
 ]
 resolver = "2"

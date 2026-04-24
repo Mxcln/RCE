@@ -247,13 +247,13 @@ impl Cube {
 ```text
 crates/rubiks-core/src/
 ├── lib.rs
-├── cube.rs
+├── state.rs
 ├── moves.rs
 ├── color.rs
 ├── notation.rs
 ├── orientation.rs
 ├── orientation_tables.rs   # 由脚本生成
-└── oriented.rs
+└── cube.rs
 ```
 
 ## 任务拆分
@@ -275,7 +275,7 @@ crates/rubiks-core/src/
 
 **Files:**
 
-- `crates/rubiks-core/src/cube.rs`
+- `crates/rubiks-core/src/state.rs`
 - `crates/rubiks-core/src/moves.rs`
 
 内容：
@@ -292,7 +292,7 @@ crates/rubiks-core/src/
 
 **Files:**
 
-- `crates/rubiks-core/src/cube.rs`
+- `crates/rubiks-core/src/state.rs`
 
 内容：
 
@@ -307,7 +307,7 @@ crates/rubiks-core/src/
 **Files:**
 
 - `crates/rubiks-core/src/moves.rs`
-- `crates/rubiks-core/src/cube.rs`
+- `crates/rubiks-core/src/state.rs`
 
 内容：
 
@@ -328,7 +328,7 @@ crates/rubiks-core/src/
 
 **Files:**
 
-- `crates/rubiks-core/src/cube.rs`
+- `crates/rubiks-core/src/state.rs`
 
 内容：
 
@@ -346,7 +346,7 @@ crates/rubiks-core/src/
 **Files:**
 
 - `crates/rubiks-core/src/color.rs`
-- `crates/rubiks-core/src/cube.rs`
+- `crates/rubiks-core/src/state.rs`
 
 内容：
 
@@ -414,7 +414,7 @@ crates/rubiks-core/src/
 
 **Files:**
 
-- `crates/rubiks-core/src/oriented.rs`
+- `crates/rubiks-core/src/cube.rs`
 
 内容：
 
